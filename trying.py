@@ -34,6 +34,26 @@ class V:
             self.grad+=(1-out.data**2)*out.grad
         out._backward=_b
         return out
+    def exp(self):
+        out = V(math.exp(self.data),prev=(self,))
+        def _b():
+            self.grad+=out.data*out.grad
+        out._backward=_b
+        return out
+    def log(self):
+        out=V(math.log(self.data),prev=(self,))
+        def _b():
+            self.grad+=(1/self.data)*out.grad
+        out._backward=_b
+        return out
+    def relu(self):
+        out=V(max(0,self.data),prev=(self,))
+        def _b():
+            self.grad += (1.0 if self.data > 0 else 0.0) * out.grad
+        out._backward=_b
+        return out
+    def __truediv__(self, other): return self*(other**-1)
+    def __rtruediv__(self, other): return other * (self**-1)
     def __neg__(self):         return self * -1              
     def __sub__(self, other):  return self + (-other)    
     def __radd__(self, other): return self + other   

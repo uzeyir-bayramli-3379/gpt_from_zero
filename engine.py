@@ -1,6 +1,5 @@
 import math
 import random
-random.seed(0)
 class V:
     def __init__(self,data,prev=(),name=''):
         self.data,self.grad,self._prev,self.name=data,0.0,prev,name
@@ -35,6 +34,26 @@ class V:
             self.grad+=(1-out.data**2)*out.grad
         out._backward=_b
         return out
+    def exp(self):
+        out = V(math.exp(self.data),prev=(self,))
+        def _b():
+            self.grad+=out.data*out.grad
+        out._backward=_b
+        return out
+    def log(self):
+        out=V(math.log(self.data),prev=(self,))
+        def _b():
+            self.grad+=(1/self.data)*out.grad
+        out._backward=_b
+        return out
+    def relu(self):
+        out=V(max(0,self.data),prev=(self,))
+        def _b():
+            self.grad += (1.0 if self.data > 0 else 0.0) * out.grad
+        out._backward=_b
+        return out
+    def __truediv__(self, other): return self*(other**-1)
+    def __rtruediv__(self, other): return other * (self**-1)
     def __neg__(self):         return self * -1              
     def __sub__(self, other):  return self + (-other)    
     def __radd__(self, other): return self + other   
@@ -43,20 +62,21 @@ class V:
 
 
 class Neuron:
-    def __init__(self,nin):
+    def __init__(self,nin,act):
         self.w= list(V(random.uniform(-1, 1) / nin ** 0.5)for _ in range(nin)) 
         self.b=V(0.0)
+        self.act=act
     def __call__(self, x):
         total=self.b
         for i in range(len(x)):
             total+=self.w[i]*x[i]
-        return V.tanh(total)
+        return V.tanh(total) if self.act=='tanh' else (V.relu(total) if self.act=='relu' else total)
     def parameters(self):
         return self.w+[self.b]
 
 class Layer:
-    def __init__(self,nin,nout):
-        self.neurons=[Neuron(nin) for _ in range(nout)]
+    def __init__(self,nin,nout,act):
+        self.neurons=[Neuron(nin,act) for _ in range(nout)]
     def __call__(self, x):
         out = []
         for n in self.neurons:
@@ -66,19 +86,22 @@ class Layer:
         return [p for n in self.neurons for p in n.parameters()]
 
 class MLP:
-    def __init__(self,nin,nouts):
+    def __init__(self,nin,nouts,act):
         self.layers=[]
         for i in range(len(nouts)):
+            a = 'linear' if i == len(nouts) - 1 else act
             if i == 0:
-                self.layers.append(Layer(nin,nouts[i]))
+                self.layers.append(Layer(nin,nouts[i],a))
             else:
-                self.layers.append(Layer(nouts[i-1],nouts[i]))
+                self.layers.append(Layer(nouts[i-1],nouts[i],a))
     def __call__(self,x):
         for layer in self.layers:
             x=layer(x)
         return x
     def parameters(self):
         return [p for layer in self.layers for p in layer.parameters()]
+
+
 
 
 def back_loop(root):
@@ -99,6 +122,7 @@ def back_loop(root):
             deps[p]=deps.get(p,0)-1
             if deps[p]==0:
                 ready.append(p)
+
 def zero_grad(params):
     for p in params:
         p.grad=0
@@ -107,37 +131,21 @@ def change(params,lr):
         p.data-=lr*p.grad
 
 
-
-
-
-model=MLP(2,[3,1])
-params=model.parameters()
-xs = [[0,0], [0,1], [1,0], [1,1]]
-ys = [-1,    1,     1,    -1] 
-for i in range(1000):
-    zero_grad(params)
-    loss = sum((model(x)[0] - y) ** 2 for x, y in zip(xs, ys)) * (1 / len(xs))
+def grad_check(params, loss_fn, eps=1e-6):
+    for p in params: p.grad = 0.0
+    loss = loss_fn()
     back_loop(loss)
-    print(loss.data)
-    change(params,0.1)
-for x, y in zip(xs, ys):
-    print(x, "target:", y, "pred:", round(model(x)[0].data, 3))
+    worst = 0
+    for p in params:
+        old = p.data
+        p.data = old + eps; up   = loss_fn().data
+        p.data = old - eps; down = loss_fn().data
+        p.data = old
+        numeric = (up - down) / (2 * eps)
+        worst = max(worst, abs(p.grad - numeric))
+    return worst
 
-#def grad_check(params, loss_fn, eps=1e-6):
-#    for p in params: p.grad = 0.0
-#    loss = loss_fn()
-#    back_loop(loss)
-#    worst = 0
-#    for p in params:
-#        old = p.data
-#        p.data = old + eps; up   = loss_fn().data
-#        p.data = old - eps; down = loss_fn().data
-#        p.data = old
-#        numeric = (up - down) / (2 * eps)
-#        worst = max(worst, abs(p.grad - numeric))
-#    return worst
-#
-#def loss_fn():
-#    return sum((model(x)[0] - y) ** 2 for x, y in zip(xs, ys)) * (1 / len(xs))
 
-#print(grad_check(params, loss_fn))
+
+
+
