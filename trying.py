@@ -1,5 +1,5 @@
 import math
-
+import random
 class V:
     def __init__(self,data,prev=(),name=''):
         self.data,self.grad,self._prev,self.name=data,0.0,prev,name
@@ -78,12 +78,13 @@ def forward():
     return (pred - target) ** 2
 lr=0.1
 
+
+x=[]
 x=V(2.0)
 w1=V(0.5)
 b1=V(-1.0)
 w2=V(0.25)
 b2=V(0.5)
-
 m1=w1*x
 z1=m1+b1
 h1=V.tanh(z1)
